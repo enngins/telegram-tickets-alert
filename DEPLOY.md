@@ -1,73 +1,130 @@
-# Deploy pe Render.com
+# Deploy pe Render.com – pași clari
 
-## 1. Sesiune Telethon (o singură dată, local)
+## Ce ai nevoie înainte
 
-Rulezi local o dată ca să se creeze `session.session` (login Telegram):
+- Cont pe [Render.com](https://dashboard.render.com)
+- Repo-ul pe GitHub (deja făcut)
+- Fișierul **session.session** în folderul proiectului (l-ai generat când a mers local)
 
-```bash
-python main.py --once
-```
+---
 
-Introduci număr, cod etc. După succes, în proiect apare `session.session`. **Nu pui acest fișier în Git.**
+## Pasul 1 – Conectează GitHub la Render
 
-## 2. Repo pe GitHub
+1. Mergi la **https://dashboard.render.com**
+2. Loghează-te (sau creează cont)
+3. Apasă **New +** (sau **Add New**) → **Background Worker**
+4. La **Connect a repository**:
+   - Dacă nu vezi repo-ul: apasă **Configure account** și dă acces la GitHub (repo-ul **telegram-tickets-alert** sau contul **enngins**)
+   - Alege repo-ul **telegram-tickets-alert**
+   - Branch: **master** (sau cum l-ai numit tu)
+   - Apasă **Connect**
 
-- Fă push la un repo (GitHub/GitLab).
-- Asigură-te că în `.gitignore` ai: `.env`, `session.session`, `last_id.json`, `__pycache__/`.
+---
 
-## 3. Render – serviciu nou
+## Pasul 2 – Setări de bază ale worker-ului
 
-1. [dashboard.render.com](https://dashboard.render.com) → **New** → **Background Worker**.
-2. Conectezi repo-ul și branch-ul.
-3. **Build command:** `pip install -r requirements.txt`
-4. **Start command:** `python main.py`
-5. **Plan:** Starter (worker-ii nu au free tier).
+Completezi câmpurile exact așa:
 
-## 4. Disc persistent
+| Câmp | Valoare |
+|------|---------|
+| **Name** | `telegram-tickets-alert` (sau orice nume) |
+| **Region** | Oregon (sau cel mai apropiat) |
+| **Branch** | `master` |
+| **Runtime** | **Python 3** |
+| **Build Command** | `pip install -r requirements.txt` |
+| **Start Command** | `python main.py` |
+| **Plan** | **Starter** (worker-ul nu e gratuit pe Render) |
 
-În worker: **Disks** → **Add Disk**:
+Nu dai încă **Create**; continuă cu pașii următori.
 
-- **Mount Path:** `/data`
-- **Size:** 1 GB
+---
 
-(Alternativ, dacă folosești Blueprint din `render.yaml`, discul e deja definit acolo.)
+## Pasul 3 – Disc persistent
 
-## 5. Variabile de mediu
+1. În pagina de creare a worker-ului, caută secțiunea **Disks** (sau **Add Disk**)
+2. Apasă **Add Disk**
+3. Completezi:
+   - **Name:** `state`
+   - **Mount Path:** `/data`
+   - **Size:** `1` GB
+4. Salvezi / lași adăugat
 
-În **Environment** adaugi (ca **Secret** unde e sensibile):
+Fără acest disc, `last_id.json` se pierde la fiecare restart.
 
-- `API_ID` – număr (ex: 12345678)
-- `API_HASH` – string
-- `BOT_TOKEN` – tokenul botului Telegram
-- `CHAT_ID` – id-ul chat-ului unde trimite alertă
-- `CHANNEL` – username-ul canalului (ex: `touristmd` sau `@touristmd`)
+---
 
-Nu trebuie să pui `STATE_FILE` și `SESSION_FILE_PATH` dacă folosești Blueprint; sunt setate în `render.yaml`.
+## Pasul 4 – Variabile de mediu (Environment)
 
-## 6. Secret File pentru sesiune
+1. În aceeași pagină, secțiunea **Environment** sau **Environment Variables**
+2. Apasă **Add Environment Variable** și adaugi **câte una** (folosești aceleași valori ca în `.env`):
 
-Fără asta, pe Render nu poți face login interactiv, deci folosești sesiunea generată local:
+| Key | Value | Secret? |
+|-----|--------|--------|
+| `API_ID` | `35603575` (numărul tău) | Da (bifează) |
+| `API_HASH` | `35621fa188056ba0e9bc04dba8cd0195` | Da |
+| `BOT_TOKEN` | `8506444790:AAE...` (tokenul complet) | Da |
+| `CHAT_ID` | `343764189` | Da (opțional) |
+| `CHANNEL` | `touristmd` | Nu |
 
-1. În worker: **Environment** → **Secret Files** (sau **Files**).
-2. **Add Secret File**:
-   - **Filename:** `session.session`
-   - **Contents:** conținutul fișierului `session.session` de pe mașina ta (îl deschizi cu un editor binar/text și copiezi tot).
+3. Adaugi și aceste două (nu sunt secrete):
 
-Pe Render fișierul va fi montat la `/etc/secrets/session.session`. Aplicația citește `SESSION_FILE_PATH` (setat în Blueprint la `/etc/secrets/session.session`) și copiază sesiunea în directorul de lucru înainte de a folosi Telethon.
+| Key | Value |
+|-----|--------|
+| `STATE_FILE` | `/data/last_id.json` |
+| `SESSION_FILE_PATH` | `/etc/secrets/session.session` |
 
-## 7. Deploy
+Verifici că nu ai spații în plus la început/sfârșit la Value.
 
-Dai **Deploy** (sau la push se face auto-deploy dacă e activat). În **Logs** ar trebui să vezi „Sesiune copiată…” și apoi ciclul de polling.
+---
 
-## Rezumat
+## Pasul 5 – Fișierul de sesiune Telegram (Secret File)
 
-- **Worker** = proces care rulează continuu și execută `python main.py` (loop cu `time.sleep(INTERVAL_SEC)`).
-- **Disc** la `/data` = acolo se salvează `last_id.json` (via `STATE_FILE=/data/last_id.json`).
-- **Secret File** `session.session` = sesiunea Telethon făcută local, montată pe Render la `/etc/secrets/session.session`.
+Fără acest fișier, worker-ul nu poate citi canalul Telegram.
 
-Dacă nu folosești Blueprint și creezi worker-ul manual, în **Environment** adaugi și:
+1. Tot în **Environment**, caută **Secret Files** (sau **Files**, **Mount Secret Files**)
+2. Apasă **Add Secret File** (sau **Add File**)
+3. Completezi:
+   - **Filename (Key):** exact `session.session`
+   - **Contents:**  
+     - Dacă există buton **Upload**: alegi fișierul **session.session** din `D:\Soft\Python\telegram-tickets-alert\session.session`  
+     - Dacă e doar câmp text: deschizi `session.session` în Notepad++ (Encoding: UTF-8 sau binary), copiezi tot și lipești (uneori Render acceptă doar text; dacă dă eroare, folosești Upload dacă apare)
 
-- `STATE_FILE` = `/data/last_id.json`
-- `SESSION_FILE_PATH` = `/etc/secrets/session.session`
+Pe Render fișierul va fi montat la `/etc/secrets/session.session`; de aceea ai setat `SESSION_FILE_PATH=/etc/secrets/session.session`.
 
-(și montezi discul la `/data` și Secret File ca mai sus).
+---
+
+## Pasul 6 – Creare worker și primul deploy
+
+1. Apasă **Create Background Worker** (sau **Deploy**)
+2. Render va:
+   - clona repo-ul
+   - rula `pip install -r requirements.txt`
+   - rula `python main.py`
+3. Mergi la **Logs** (tab-ul **Logs** al worker-ului)
+4. Ar trebui să vezi ceva de genul:
+   - `Sesiune copiată din /etc/secrets/session.session`
+   - `Pornit poll la fiecare 300 secunde`
+   - (la fiecare ~5 min) mesaje de tip „Alert trimis…” dacă găsește oferte
+
+Dacă în Logs apare eroare (ex. „Lipsește API_ID”, „Session invalid”), revino la **Environment** și la **Secret File** și verifici valorile și fișierul.
+
+---
+
+## După deploy
+
+- **Auto-deploy:** la fiecare push pe branch-ul conectat (ex. `master`), Render poate face deploy automat (opțiune în Settings).
+- **Logs:** mereu din tab-ul **Logs** vezi ce face aplicația.
+- **Oprire:** din Dashboard poți opri worker-ul (nu mai consumă credite), sau îl lași pornit ca să primești alerte continuu.
+
+---
+
+## Rezumat rapid
+
+1. New → Background Worker → conectezi repo-ul.
+2. Build: `pip install -r requirements.txt`, Start: `python main.py`, Plan: Starter.
+3. Add Disk: mount path `/data`, 1 GB.
+4. Environment: `API_ID`, `API_HASH`, `BOT_TOKEN`, `CHAT_ID`, `CHANNEL`, plus `STATE_FILE` și `SESSION_FILE_PATH`.
+5. Secret File: `session.session` = fișierul tău local (upload sau paste).
+6. Create Worker → verifici Logs.
+
+Gata.

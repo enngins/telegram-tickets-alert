@@ -70,14 +70,45 @@ def normalize_text(text: str) -> str:
     return text
 
 
+REDIS_KEY = "telegram_tickets:last_id"
+_redis = None
+
+def _get_redis():
+    global _redis
+    if _redis is not None:
+        return _redis
+    url = os.environ.get("UPSTASH_REDIS_REST_URL")
+    token = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+    if url and token:
+        try:
+            from upstash_redis import Redis
+            _redis = Redis(url=url, token=token)
+            return _redis
+        except Exception as e:
+            log.warning("Redis indisponibil, folosesc fișier: %s", e)
+    return None
+
 def load_last_id():
+    r = _get_redis()
+    if r:
+        try:
+            v = r.get(REDIS_KEY)
+            return int(v) if v else 0
+        except Exception as e:
+            log.warning("Redis get eșuat: %s", e)
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, "r") as f:
             return json.load(f).get("last_id", 0)
     return 0
 
-
 def save_last_id(last_id):
+    r = _get_redis()
+    if r:
+        try:
+            r.set(REDIS_KEY, str(last_id))
+            return
+        except Exception as e:
+            log.warning("Redis set eșuat: %s", e)
     with open(STATE_FILE, "w") as f:
         json.dump({"last_id": last_id}, f)
 
@@ -134,10 +165,21 @@ def run_once():
 
 
 def _ensure_session():
-    """Copiază sesiunea din path-ul Render (Secret File) în cwd, ca Telethon să o găsească."""
+    """Sesiune: din SESSION_B64 (base64, GitHub Actions), din SESSION_FILE_PATH (Render), sau fișier local."""
+    dest = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session.session")
+    b64 = os.environ.get("SESSION_B64")
+    if b64:
+        import base64
+        try:
+            data = base64.b64decode(b64)
+            with open(dest, "wb") as f:
+                f.write(data)
+            log.info("Sesiune scrisă din SESSION_B64")
+            return
+        except Exception as e:
+            log.warning("SESSION_B64 invalid: %s", e)
     if SESSION_FILE_PATH and os.path.isfile(SESSION_FILE_PATH):
-        dest = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session.session")
-        if SESSION_FILE_PATH != dest:
+        if os.path.abspath(SESSION_FILE_PATH) != os.path.abspath(dest):
             shutil.copy(SESSION_FILE_PATH, dest)
             log.info("Sesiune copiată din %s", SESSION_FILE_PATH)
 
