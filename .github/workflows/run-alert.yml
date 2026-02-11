@@ -1,7 +1,7 @@
 name: Telegram tickets alert
 on:
   schedule:
-    - cron: "*/5 * * * *"   # la fiecare 5 minute
+    - cron: "*/15 * * * *"  # la fiecare 15 minute
   workflow_dispatch:        # rulează manual din Actions tab
 jobs:
   run:
