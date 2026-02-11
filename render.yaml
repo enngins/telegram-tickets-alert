@@ -1,0 +1,21 @@
+# Background Worker – rulează la fiecare INTERVAL_SEC secunde, state în /data
+services:
+  - type: worker
+    name: telegram-tickets-alert
+    runtime: python
+    plan: starter
+
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+
+    disk:
+      name: state
+      mountPath: /data
+      sizeGB: 1
+
+    envVars:
+      - key: STATE_FILE
+        value: /data/last_id.json
+      - key: SESSION_FILE_PATH
+        value: /etc/secrets/session.session
+      # Adaugă în Dashboard: API_ID, API_HASH, BOT_TOKEN, CHAT_ID, CHANNEL; opțional INTERVAL_SEC (default 300)
