@@ -406,11 +406,6 @@ If you find a problem or have an idea for improving the project, feel free to op
 
 ---
 
-# 📄 License
-
-See the repository for the current license information.
-
----
 
 ## ⭐ If this project is useful to you
 
