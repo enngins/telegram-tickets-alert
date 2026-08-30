@@ -288,7 +288,7 @@ SESSION_FILE_PATH=/etc/secrets/session.session
 
 For the complete Render deployment walkthrough, see:
 
-**[DEPLOY.md](./DEPLOY.md)**
+**[RENDER.md](./RENDER.md)**
 
 ---
 
